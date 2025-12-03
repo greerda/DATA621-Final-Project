@@ -1,0 +1,60 @@
+# ---------------------------------------------------------
+# RStudio and project files
+# ---------------------------------------------------------
+.Rproj.user/
+*.Rproj
+.Rhistory
+.RData
+.Ruserdata
+
+# Ignore session-specific files
+.Rapp.history
+
+# ---------------------------------------------------------
+# Operating system files
+# ---------------------------------------------------------
+# Windows
+Thumbs.db
+Desktop.ini
+
+# macOS (just in case)
+.DS_Store
+
+# ---------------------------------------------------------
+# Output / generated files
+# ---------------------------------------------------------
+outputs/
+reports/
+*.html
+*.pdf
+*.docx
+*.rds
+*.RData
+*.csv~    # temp file backups
+
+# ---------------------------------------------------------
+# Logs, caches, temporary files
+# ---------------------------------------------------------
+*.log
+*.tmp
+*.swp
+*.bak
+*.old
+
+# R package build / cache folders
+.Rcache/
+__pycache__/  # if you're mixing python
+
+# ---------------------------------------------------------
+# Data
+# ---------------------------------------------------------
+# Keep raw data out of the repo unless required.
+data/*.csv
+!data/insurance.csv   # keep THIS specific file
+
+# ---------------------------------------------------------
+# Quarto / knitr artifacts
+# ---------------------------------------------------------
+*_files/
+*_cache/
+cache/
