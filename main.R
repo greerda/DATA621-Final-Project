@@ -82,3 +82,31 @@ ggsave("plots/plot_charges_by_smoker.png", p1, width = 7, height = 5)
 
 # Optional: see what got written
 print(list.files("plots", recursive = TRUE))
+
+ins_workflow <- build_insurance_workflow(insurance)
+
+ins_fit <- fit(ins_workflow, data = insurance)
+
+print(ins_fit)
+
+## ---- 5. Inspect model results ----
+# Extract underlying lm object
+lm_obj <- extract_fit_engine(ins_fit)
+summary(lm_obj)
+
+## ---- 6. Make predictions (example) ----
+insurance_pred <- predict(ins_fit, new_data = insurance) %>%
+  bind_cols(insurance)
+
+head(insurance_pred)
+
+## ---- 7. Save outputs (optional) ----
+if (!dir.exists("outputs")) dir.create("outputs", recursive = TRUE)
+write.csv(insurance_pred, "outputs/insurance_predictions.csv", row.names = FALSE)
+
+
+
+
+
+
+

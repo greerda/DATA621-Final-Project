@@ -23,6 +23,7 @@
 # ================================================
 
 library(dplyr)
+library(tidymodels)
 
 # ------------------------------------------------
 # Log Transform for Charges
@@ -100,3 +101,29 @@ check_skewness <- function(x) {
   skew <- sum((x - m)^3) / (n * s^3)
   return(round(skew, 3))
 }
+
+#----------------------------------------------
+# Checking for Empty Fields
+#----------------------------------------------
+# Helper to check if there are empty fields or NA in the datasource
+
+find_empty_cells <- function(df) {
+  # Create a logical matrix where TRUE means the cell is empty or NA
+  bad_matrix <- is.na(df) | df == ""
+  
+  # Convert TRUE positions into row/column indices
+  which(bad_matrix, arr.ind = TRUE)
+}
+
+
+
+build_insurance_recipe <- function(df) {
+  recipe(charges ~ ., data = df) %>%
+    # Just in case any nominal predictors are still character
+    step_string2factor(all_nominal_predictors()) %>%
+    # One-hot / dummy encoding for all categorical predictors
+    step_dummy(all_nominal_predictors()) %>%
+    # Normalize numeric predictors (except outcome)
+    step_normalize(all_numeric_predictors(), -all_outcomes())
+}
+
