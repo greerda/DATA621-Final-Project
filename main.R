@@ -3,6 +3,13 @@ library(ggplot2)
 library(reshape2)
 library(tidymodels)
 library(skimr)
+library(rsample)
+library(recipes)
+library(parsnip)
+library(workflows)
+library(yardstick)
+library(tune)
+library(workflowsets)
 
 source("R/utils.R")
 source("R/data_load.R")
@@ -103,10 +110,3 @@ head(insurance_pred)
 ## ---- 7. Save outputs (optional) ----
 if (!dir.exists("outputs")) dir.create("outputs", recursive = TRUE)
 write.csv(insurance_pred, "outputs/insurance_predictions.csv", row.names = FALSE)
-
-
-
-
-
-
-
