@@ -94,6 +94,10 @@ print(list.files("plots", recursive = TRUE))
 # ================================================
 # MODEL TRAINING WITH PROPER TRAIN/TEST SPLIT
 # ================================================
+# Using Stepwise AIC model (best performer from model comparison)
+# Formula: charges ~ I(age^2) + bmi + I(bmi^2) + children + sex +
+#                    smoker + region + smoker:bmi
+# ================================================
 
 ## ---- Prepare data with train/test split ----
 data_splits <- prepare_modeling_data("data/insurance.csv",
@@ -105,37 +109,60 @@ train_data <- data_splits$train
 test_data  <- data_splits$test
 cv_folds   <- data_splits$cv_folds
 
-## ---- Build and fit workflow on training data ----
-ins_workflow <- build_insurance_workflow(train_data)
-ins_fit <- fit(ins_workflow, data = train_data)
+## ---- Fit best model (Stepwise AIC) ----
+cat("\n\n========== FITTING BEST MODEL (Stepwise AIC) ==========\n")
+best_model <- fit_model_stepwise_aic(train_data, trace = FALSE)
 
-print(ins_fit)
+cat("\nModel Formula:\n")
+print(formula(best_model))
 
-## ---- Inspect model results ----
-lm_obj <- extract_fit_engine(ins_fit)
-summary(lm_obj)
+cat("\nModel Summary:\n")
+summary(best_model)
 
 ## ---- Evaluate on test set ----
 cat("\n\n========== TEST SET EVALUATION ==========\n")
-test_metrics <- evaluate_model(ins_fit, test_data)
-print_metrics(test_metrics, model_name = "Linear Regression")
+test_pred <- predict(best_model, newdata = test_data)
+test_actual <- test_data$charges
 
-## ---- Cross-validation evaluation ----
-cat("\n\n========== CROSS-VALIDATION RESULTS ==========\n")
-cv_results <- cv_evaluate(ins_workflow, cv_folds)
-cv_summary <- summarize_cv(cv_results)
-print(cv_summary)
+test_metrics <- data.frame(
+  rmse = sqrt(mean((test_actual - test_pred)^2)),
+  mae = mean(abs(test_actual - test_pred)),
+  mape = mean(abs((test_actual - test_pred) / test_actual)) * 100,
+  r2 = 1 - sum((test_actual - test_pred)^2) / sum((test_actual - mean(test_actual))^2)
+)
+
+cat(sprintf("\n  RMSE:        $%.2f\n", test_metrics$rmse))
+cat(sprintf("  MAE:         $%.2f\n", test_metrics$mae))
+cat(sprintf("  MAPE:        %.2f%%\n", test_metrics$mape))
+cat(sprintf("  R-squared:   %.4f\n", test_metrics$r2))
+
+## ---- Model Diagnostics ----
+cat("\n\n========== MODEL DIAGNOSTICS ==========\n")
+diag_results <- run_diagnostics(best_model, "Stepwise AIC")
 
 ## ---- Generate predictions on test set ----
-insurance_pred <- predict(ins_fit, new_data = test_data) %>%
-  bind_cols(test_data)
+insurance_pred <- test_data %>%
+  mutate(
+    predicted_charges = test_pred,
+    residual = charges - predicted_charges,
+    pct_error = abs(residual / charges) * 100
+  )
 
-head(insurance_pred)
+cat("\nSample Predictions:\n")
+print(head(insurance_pred %>% dplyr::select(charges, predicted_charges, residual, pct_error)))
 
 ## ---- Save outputs ----
 if (!dir.exists("outputs")) dir.create("outputs", recursive = TRUE)
 write.csv(insurance_pred, "outputs/insurance_predictions.csv", row.names = FALSE)
 write.csv(test_metrics, "outputs/model_metrics.csv", row.names = FALSE)
-write.csv(cv_summary, "outputs/cv_summary.csv", row.names = FALSE)
+
+# Save diagnostic plots
+ggsave("plots/diagnostics/best_model_resid_vs_fitted.png",
+       diag_results$plots$residual_plots$resid_vs_fitted, width = 7, height = 5)
+ggsave("plots/diagnostics/best_model_qq.png",
+       diag_results$plots$qq_plot, width = 7, height = 5)
+ggsave("plots/diagnostics/best_model_cooks.png",
+       diag_results$plots$cooks_plot, width = 7, height = 5)
 
 cat("\nOutputs saved to outputs/ directory\n")
+cat("Diagnostic plots saved to plots/diagnostics/\n")
