@@ -289,7 +289,7 @@ eda_bivariate <- function(insurance) {
 # Correlation Heatmap
 # ------------------------------------------------
 eda_correlation <- function(insurance) {
-  numeric_df <- insurance %>% select(age, bmi, children, charges)
+  numeric_df <- insurance %>% dplyr::select(age, bmi, children, charges)
 
   corr_matrix <- round(cor(numeric_df), 3)
   cat("\n----- Correlation Matrix -----\n")
