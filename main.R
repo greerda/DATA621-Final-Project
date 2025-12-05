@@ -10,6 +10,7 @@ library(workflows)
 library(yardstick)
 library(tune)
 library(workflowsets)
+library(purrr)
 
 source("R/utils.R")
 source("R/data_load.R")
@@ -90,23 +91,51 @@ ggsave("plots/plot_charges_by_smoker.png", p1, width = 7, height = 5)
 # Optional: see what got written
 print(list.files("plots", recursive = TRUE))
 
-ins_workflow <- build_insurance_workflow(insurance)
+# ================================================
+# MODEL TRAINING WITH PROPER TRAIN/TEST SPLIT
+# ================================================
 
-ins_fit <- fit(ins_workflow, data = insurance)
+## ---- Prepare data with train/test split ----
+data_splits <- prepare_modeling_data("data/insurance.csv",
+                                      train_prop = 0.8,
+                                      cv_folds = 10,
+                                      seed = 123)
+
+train_data <- data_splits$train
+test_data  <- data_splits$test
+cv_folds   <- data_splits$cv_folds
+
+## ---- Build and fit workflow on training data ----
+ins_workflow <- build_insurance_workflow(train_data)
+ins_fit <- fit(ins_workflow, data = train_data)
 
 print(ins_fit)
 
-## ---- 5. Inspect model results ----
-# Extract underlying lm object
+## ---- Inspect model results ----
 lm_obj <- extract_fit_engine(ins_fit)
 summary(lm_obj)
 
-## ---- 6. Make predictions (example) ----
-insurance_pred <- predict(ins_fit, new_data = insurance) %>%
-  bind_cols(insurance)
+## ---- Evaluate on test set ----
+cat("\n\n========== TEST SET EVALUATION ==========\n")
+test_metrics <- evaluate_model(ins_fit, test_data)
+print_metrics(test_metrics, model_name = "Linear Regression")
+
+## ---- Cross-validation evaluation ----
+cat("\n\n========== CROSS-VALIDATION RESULTS ==========\n")
+cv_results <- cv_evaluate(ins_workflow, cv_folds)
+cv_summary <- summarize_cv(cv_results)
+print(cv_summary)
+
+## ---- Generate predictions on test set ----
+insurance_pred <- predict(ins_fit, new_data = test_data) %>%
+  bind_cols(test_data)
 
 head(insurance_pred)
 
-## ---- 7. Save outputs (optional) ----
+## ---- Save outputs ----
 if (!dir.exists("outputs")) dir.create("outputs", recursive = TRUE)
 write.csv(insurance_pred, "outputs/insurance_predictions.csv", row.names = FALSE)
+write.csv(test_metrics, "outputs/model_metrics.csv", row.names = FALSE)
+write.csv(cv_summary, "outputs/cv_summary.csv", row.names = FALSE)
+
+cat("\nOutputs saved to outputs/ directory\n")

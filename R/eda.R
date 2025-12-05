@@ -32,6 +32,142 @@ eda_summary <- function(insurance) {
 }
 
 # ------------------------------------------------
+# Distribution Statistics (for transformation decisions)
+# ------------------------------------------------
+# Computes skewness, kurtosis, and normality tests
+# Returns a data frame suitable for report tables
+eda_distribution_stats <- function(insurance) {
+  numeric_vars <- c("age", "bmi", "children", "charges")
+
+  # Helper functions
+  calc_skewness <- function(x) {
+    n <- length(x)
+    m <- mean(x)
+    s <- sd(x)
+    sum((x - m)^3) / (n * s^3)
+  }
+
+  calc_kurtosis <- function(x) {
+    n <- length(x)
+    m <- mean(x)
+    s <- sd(x)
+    sum((x - m)^4) / (n * s^4) - 3  # excess kurtosis
+  }
+
+  stats_list <- lapply(numeric_vars, function(v) {
+    x <- insurance[[v]]
+
+    # Shapiro-Wilk test (sample if n > 5000)
+    if (length(x) > 5000) {
+      set.seed(123)
+      x_sample <- sample(x, 5000)
+    } else {
+      x_sample <- x
+    }
+    shapiro_p <- shapiro.test(x_sample)$p.value
+
+    data.frame(
+      variable = v,
+      mean     = round(mean(x), 2),
+      sd       = round(sd(x), 2),
+      median   = round(median(x), 2),
+      min      = round(min(x), 2),
+      max      = round(max(x), 2),
+      skewness = round(calc_skewness(x), 3),
+      kurtosis = round(calc_kurtosis(x), 3),
+      shapiro_p = round(shapiro_p, 4),
+      normal   = ifelse(shapiro_p > 0.05, "Yes", "No")
+    )
+  })
+
+  stats_df <- do.call(rbind, stats_list)
+
+  cat("\n----- Distribution Statistics -----\n")
+  print(stats_df)
+
+  cat("\nInterpretation:\n")
+  cat("  - Skewness: |value| > 1 indicates high skew (consider log transform)\n")
+  cat("  - Kurtosis: |value| > 2 indicates heavy tails\n")
+  cat("  - Shapiro p < 0.05 rejects normality\n")
+
+  return(stats_df)
+}
+
+# ------------------------------------------------
+# Compare Original vs Log-Transformed Distribution
+# ------------------------------------------------
+# Shows before/after stats for charges (key for methodology)
+eda_transformation_comparison <- function(insurance) {
+  charges <- insurance$charges
+  log_charges <- log(charges)
+
+  calc_skewness <- function(x) {
+    n <- length(x)
+    m <- mean(x)
+    s <- sd(x)
+    sum((x - m)^3) / (n * s^3)
+  }
+
+  comparison <- data.frame(
+    metric = c("Mean", "Median", "SD", "Skewness", "Min", "Max"),
+    original = c(
+      round(mean(charges), 2),
+      round(median(charges), 2),
+      round(sd(charges), 2),
+      round(calc_skewness(charges), 3),
+      round(min(charges), 2),
+      round(max(charges), 2)
+    ),
+    log_transformed = c(
+      round(mean(log_charges), 2),
+      round(median(log_charges), 2),
+      round(sd(log_charges), 2),
+      round(calc_skewness(log_charges), 3),
+      round(min(log_charges), 2),
+      round(max(log_charges), 2)
+    )
+  )
+
+  cat("\n----- Charges: Original vs Log-Transformed -----\n")
+  print(comparison)
+
+  return(comparison)
+}
+
+# ------------------------------------------------
+# QQ Plots for Normality Assessment
+# ------------------------------------------------
+eda_qq_plots <- function(insurance) {
+  plots <- list()
+
+  # Original charges
+  p1 <- ggplot(insurance, aes(sample = charges)) +
+    stat_qq() +
+    stat_qq_line(color = "red") +
+    labs(title = "Q-Q Plot: Charges (Original)",
+         x = "Theoretical Quantiles",
+         y = "Sample Quantiles") +
+    theme_minimal()
+
+  # Log-transformed charges
+  p2 <- ggplot(insurance, aes(sample = log(charges))) +
+    stat_qq() +
+    stat_qq_line(color = "red") +
+    labs(title = "Q-Q Plot: Log(Charges)",
+         x = "Theoretical Quantiles",
+         y = "Sample Quantiles") +
+    theme_minimal()
+
+  print(p1)
+  print(p2)
+
+  plots$qq_charges_original <- p1
+  plots$qq_charges_log <- p2
+
+  return(plots)
+}
+
+# ------------------------------------------------
 # Outlier Detection (IQR Method)
 # ------------------------------------------------
 # Flags observations outside 1.5*IQR from Q1/Q3
@@ -204,27 +340,116 @@ eda_pairplot <- function(insurance) {
 }
 
 # ------------------------------------------------
+# Interaction Effect Visualization
+# ------------------------------------------------
+# Key interactions: smoker:bmi, smoker:age (visible in EDA)
+eda_interactions <- function(insurance) {
+  plots <- list()
+
+  # Smoker x BMI interaction on charges
+  p1 <- ggplot(insurance, aes(x = bmi, y = charges, color = smoker)) +
+    geom_point(alpha = 0.5) +
+    geom_smooth(method = "lm", se = TRUE) +
+    labs(title = "Interaction: Smoker x BMI on Charges",
+         subtitle = "Different slopes suggest interaction effect",
+         x = "BMI", y = "Charges") +
+    theme_minimal() +
+    scale_color_manual(values = c("no" = "#377EB8", "yes" = "#E41A1C"))
+
+  # Smoker x Age interaction on charges
+  p2 <- ggplot(insurance, aes(x = age, y = charges, color = smoker)) +
+    geom_point(alpha = 0.5) +
+    geom_smooth(method = "lm", se = TRUE) +
+    labs(title = "Interaction: Smoker x Age on Charges",
+         subtitle = "Different slopes suggest interaction effect",
+         x = "Age", y = "Charges") +
+    theme_minimal() +
+    scale_color_manual(values = c("no" = "#377EB8", "yes" = "#E41A1C"))
+
+  print(p1)
+  print(p2)
+
+  plots$interaction_smoker_bmi <- p1
+  plots$interaction_smoker_age <- p2
+
+  return(plots)
+}
+
+# ------------------------------------------------
+# Generate Summary Table for Report Appendix
+# ------------------------------------------------
+# Creates a formatted table of all numeric summaries
+eda_summary_table <- function(insurance) {
+  numeric_vars <- c("age", "bmi", "children", "charges")
+  cat_vars <- c("sex", "smoker", "region")
+
+  # Numeric summaries
+  numeric_summary <- do.call(rbind, lapply(numeric_vars, function(v) {
+    x <- insurance[[v]]
+    data.frame(
+      Variable = v,
+      N = length(x),
+      Mean = round(mean(x), 2),
+      SD = round(sd(x), 2),
+      Median = round(median(x), 2),
+      Min = round(min(x), 2),
+      Max = round(max(x), 2)
+    )
+  }))
+
+  # Categorical summaries
+  cat_summary <- do.call(rbind, lapply(cat_vars, function(v) {
+    tbl <- table(insurance[[v]])
+    data.frame(
+      Variable = v,
+      Levels = paste(names(tbl), collapse = ", "),
+      Counts = paste(as.vector(tbl), collapse = ", "),
+      Mode = names(which.max(tbl))
+    )
+  }))
+
+  list(
+    numeric = numeric_summary,
+    categorical = cat_summary
+  )
+}
+
+# ------------------------------------------------
 # Master Function - Runs All EDA
 # ------------------------------------------------
 run_eda <- function(insurance) {
   # Basic summary
   eda_summary(insurance)
 
+  # Distribution statistics (justifies transformations)
+  dist_stats <- eda_distribution_stats(insurance)
+  transform_comparison <- eda_transformation_comparison(insurance)
+
   # Outlier detection
   outlier_info <- eda_outliers(insurance)
 
   # Visualizations
-  uni_plots  <- eda_univariate(insurance)
-  bi_plots   <- eda_bivariate(insurance)
-  corr_plot  <- eda_correlation(insurance)
-  pair_plot  <- eda_pairplot(insurance)
+  uni_plots    <- eda_univariate(insurance)
+  bi_plots     <- eda_bivariate(insurance)
+  qq_plots     <- eda_qq_plots(insurance)
+  corr_plot    <- eda_correlation(insurance)
+  interaction_plots <- eda_interactions(insurance)
+  pair_plot    <- eda_pairplot(insurance)
+
+  # Summary tables for report
+  summary_tables <- eda_summary_table(insurance)
 
   # Return everything for downstream use
   list(
-    uni_plots    = uni_plots,
-    bi_plots     = bi_plots,
-    corr_plot    = corr_plot,
-    pair_plot    = pair_plot,
-    outlier_info = outlier_info
+    uni_plots       = uni_plots,
+    bi_plots        = bi_plots,
+    qq_plots        = qq_plots,
+    corr_plot       = corr_plot,
+    pair_plot       = pair_plot,
+    interaction_plots = interaction_plots,
+    outlier_info    = outlier_info,
+    dist_stats      = dist_stats,
+    transform_comparison = transform_comparison,
+    summary_tables  = summary_tables
   )
 }
